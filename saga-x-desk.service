@@ -1,0 +1,27 @@
+[Unit]
+Description=Saga X Agent Desk Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/desk-dashboard
+ExecStart=/usr/bin/python3 /home/ubuntu/desk-dashboard/server.py
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/ubuntu/desk-dashboard/logs/server.log
+StandardError=append:/home/ubuntu/desk-dashboard/logs/server.log
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/desk-dashboard/api /home/ubuntu/desk-dashboard/logs
+
+# Networking
+Environment=PORT=8080
+Environment=HOST=0.0.0.0
+
+[Install]
+WantedBy=multi-user.target

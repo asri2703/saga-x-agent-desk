@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Saga X — Agent Desk</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%91%A5%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo-dot"></span>
+      <h1>Saga X <span class="brand-sub">Agent Desk</span></h1>
+    </div>
+    <div class="meta">
+      <span id="last-updated" class="muted">connecting…</span>
+      <span id="conn-status" class="status-pill status-pill--connecting">●</span>
+    </div>
+  </header>
+
+  <main class="office">
+    <div class="office-bg"></div>
+    <section class="agents" id="agents">
+      <!-- agent cards injected by JS -->
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span class="muted">Saga X Ventures Marketing Agency · Marketing Agency Command Center</span>
+    <span class="muted">v1.0 · stdlib Python · no npm</span>
+  </footer>
+
+  <script src="/static/js/avatars.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

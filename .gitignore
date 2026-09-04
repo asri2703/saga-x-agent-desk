@@ -1,0 +1,19 @@
+# Build artifacts
+__pycache__/
+*.pyc
+*.pyo
+
+# Local state — never commit (regenerated on server)
+api/state.json
+api/*.json.tmp
+
+# Local logs
+logs/*.log
+*.bak
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
