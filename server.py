@@ -28,11 +28,17 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 ROOT = Path(__file__).parent
 STATE_FILE = ROOT / "api" / "state.json"
 LOG_FILE = ROOT / "logs" / "server.log"
+HISTORY_FILE = ROOT / "api" / "history.jsonl"
+
+# Auth: shared secret for state-changing endpoints.
+# Set via env var POST_TOKEN; falls back to default for dev convenience.
+POST_TOKEN = os.environ.get("POST_TOKEN", "saga-x-dev-token-change-me")
+AUTH_REQUIRED = os.environ.get("AUTH_REQUIRED", "0") == "1"
 
 # Valid agent IDs (must match dashboard avatars)
 VALID_AGENTS = {"putri", "alisya", "julia", "farah", "delisha"}
@@ -161,6 +167,28 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response(200, load_state())
         elif path == "/api/health":
             self._json_response(200, {"ok": True, "uptime_s": int(time.time() - SERVER_START)})
+        elif path == "/api/history":
+            # Read recent history entries (newest first, capped)
+            limit = 100
+            try:
+                if "limit" in parse_qs(parsed.query):
+                    limit = min(int(parse_qs(parsed.query)["limit"][0]), 1000)
+            except (ValueError, KeyError):
+                pass
+            entries = []
+            if HISTORY_FILE.exists():
+                try:
+                    with HISTORY_FILE.open("r", encoding="utf-8") as f:
+                        # Read last N lines efficiently
+                        lines = f.readlines()[-limit:]
+                        for line in reversed(lines):
+                            try:
+                                entries.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                continue
+                except OSError as e:
+                    log(f"history read failed: {e}")
+            self._json_response(200, {"entries": entries, "count": len(entries)})
         elif path.startswith("/static/"):
             self._serve_static(path, send_body)
         else:
@@ -173,6 +201,13 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path
 
         if path == "/api/state":
+            # Auth check (only when AUTH_REQUIRED=1)
+            if AUTH_REQUIRED:
+                provided = self.headers.get("X-Saga-Token", "")
+                if provided != POST_TOKEN:
+                    log(f"AUTH FAIL from {self.address_string()} (no/bad token)")
+                    return self._json_response(401, {"error": "unauthorized"})
+
             length = int(self.headers.get("Content-Length", 0))
             raw = self.rfile.read(length) if length else b""
             try:
@@ -206,8 +241,29 @@ class Handler(BaseHTTPRequestHandler):
             state[agent_id]["updated_at"] = int(time.time())
             save_state(state)
 
+            # Append to history log (append-only, one JSON object per line)
+            try:
+                HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+                with HISTORY_FILE.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps({
+                        "ts": state[agent_id]["updated_at"],
+                        "agent": agent_id,
+                        "state": new_state,
+                        "task": state[agent_id]["task"],
+                        "tool": state[agent_id]["current_tool"],
+                    }, ensure_ascii=False) + "\n")
+            except OSError as e:
+                log(f"history append failed: {e}")
+
             log(f"STATE {agent_id} -> {new_state} task={state[agent_id]['task']!r}")
             self._json_response(200, {"ok": True, "agent_id": agent_id, "state": state[agent_id]})
+        elif path == "/api/auth/test":
+            # Diagnostic endpoint: check if auth header is correct
+            provided = self.headers.get("X-Saga-Token", "")
+            return self._json_response(200, {
+                "auth_required": AUTH_REQUIRED,
+                "provided_token_matches": provided == POST_TOKEN and AUTH_REQUIRED,
+            })
         else:
             self._json_response(404, {"error": "not found", "path": path})
 
