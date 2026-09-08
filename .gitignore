@@ -45,3 +45,8 @@ dot-env-*
 gcp-*.json
 service-account*.json
 credentials*.json
+
+# Mastery webhook config — contains CTO_API_KEY
+mastery_webhook_*.json
+*_webhook_config.json
+*_quickref.json

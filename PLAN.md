@@ -224,7 +224,14 @@ call; real operational context pushed them past the line.
 
 **Still unresolved**
 
-- **Where the funnel code lives.** Not in this repo. Needed before touching Telegram.
+- **Mastery connectivity.** The funnel runs on the *old* server
+  (`/home/ubuntu/mastery-automation/`) with a Flask receiver on port 5002 built
+  specifically for Alisya to poll — cron health, live signal counts, state files.
+  Port 5002 is firewalled, so nothing outside can reach it, this desk included.
+  `agents/mastery.py` is written and degrades to a clear "cannot check"; it needs
+  one of: a GCP firewall rule on the old project allowing `34.126.127.159/32` to
+  port 5002 (tightest), or an nginx location on the old box proxying it over 443.
+  Both need access to the old server, which this session does not have.
 - **`saga-x-crm.com`** — dead DNS, now monitored and opening incidents. Fix it, or
   disable the monitor. Leaving it failing trains Abang to ignore Alisya, which
   defeats the point of her.

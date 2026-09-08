@@ -266,6 +266,15 @@ def set_assignment_enabled(_agent: str, assignment_id: str,
     return {"ok": True, "title": rows[0]["title"], "enabled": enabled}
 
 
+def mastery_status(_agent: str) -> dict:
+    """Mastery Signal automation health: crons, live signals, state files.
+
+    Read-only by design. That bot is live revenue; this desk watches it
+    and does not touch it."""
+    from . import mastery
+    return _json_safe(mastery.summary())
+
+
 # ── Alisya's own workspace ──────────────────────────────────────
 # Managing what she watches is her job, not remediation. The line is
 # the machines: she may change her watchlist and her incident records,
@@ -603,6 +612,13 @@ REGISTRY: dict[str, tuple[Callable, str, dict]] = {
         "set_assignment_enabled", "Turn a standing instruction on or off.",
         {"assignment_id": S, "enabled": {"type": "boolean"}}, ["assignment_id"])),
 
+    "mastery_status": (mastery_status, FREE, _t(
+        "mastery_status",
+        "Health of the Mastery Signal automation — cron jobs, live signal count, "
+        "state files. Read-only. If it reports unreachable, say so plainly: the "
+        "check did not happen, which is not the same as everything being fine.",
+        {})),
+
     "add_monitor": (add_monitor, FREE, _t(
         "add_monitor", "Start watching a domain or endpoint.",
         {"name": S, "target": {**S, "description": "domain, no scheme"},
@@ -703,11 +719,11 @@ REGISTRY: dict[str, tuple[Callable, str, dict]] = {
 AGENT_TOOLS: dict[str, list[str]] = {
     "putri": ["set_my_state", "business_summary", "list_tasks", "create_task",
               "list_clients", "list_invoices", "list_bookings", "list_content",
-              "list_incidents", "monitor_status",
+              "list_incidents", "monitor_status", "mastery_status",
               "create_assignment", "list_assignments", "set_assignment_enabled"],
     "alisya": ["set_my_state", "monitor_status", "list_incidents",
                "list_tasks", "create_task", "create_assignment", "list_assignments", "set_assignment_enabled",
-               "add_monitor", "set_monitor_enabled", "acknowledge_incident", "resolve_incident"],
+               "add_monitor", "set_monitor_enabled", "acknowledge_incident", "resolve_incident", "mastery_status"],
     "julia": ["set_my_state", "business_summary", "list_clients", "list_services",
               "list_invoices", "list_bookings", "list_tasks", "create_task",
               "request_approval", "create_assignment", "list_assignments",
