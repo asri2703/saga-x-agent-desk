@@ -207,6 +207,29 @@ call; real operational context pushed them past the line.
 
 ## Open
 
+**Parked — 3D avatars**
+
+Phases 1-2 are built and deployed; phases 3-7 wait on one file. Everything
+needed to resume:
+
+- **Ready Player Me is gone.** Shut down 31 Jan 2026 after the Netflix
+  acquisition. The URLs in `saga_x_3d_agent_vscode_instruction.json` cannot be
+  fetched and no new avatars can be made there. Verified: DNS fails from both
+  the laptop and the VM.
+- **Replacement: Avaturn** (avaturn.me, verified live). Realistic rather than
+  stylised, ships the same ARKit 52-blendshape set. Avatar SDK is the other
+  live option. Mixamo has body rigs but no facial blendshapes.
+- **To resume:** create the avatar, export GLB with ARKit blendshapes to
+  `static/avatars/putri/putri.glb`, set `model` in `static/js/agents3d.js`.
+  Nothing else changes — the code is written against the ARKit standard, not
+  against any provider.
+- **Then buildable:** phase 4 (voice in), phase 5 (TTS + lip-sync). Both need a
+  backend proxy for the TTS call, because requirement 11 forbids a key in
+  frontend code. TTS is new spend on top of the $30 cap.
+- Weight to expect: Three.js is 603KB and a rigged GLB with morph targets is
+  typically 5-20MB. Today the desk loads neither, because `init()` returns
+  before importing Three.js when no model is configured.
+
 **To do when the project is finished**
 
 - **Delete the GCP service account key.** `desk-deployer` in project `desk-sagax`.
