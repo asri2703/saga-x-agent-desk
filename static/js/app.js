@@ -63,6 +63,9 @@
         card.style.animation = "";
       }
       card.setAttribute("data-state", newState);
+      // Drive the 3D avatar from the same state change, so it can never
+      // disagree with the card it sits in.
+      window.SagaXAvatar3D?.setState(id, newState);
     }
 
     card.querySelector(".agent-name").textContent = data.name || id;

@@ -100,6 +100,11 @@
 
   <script src="/static/js/avatars.js"></script>
   <script src="/static/js/app.js"></script>
+  <script src="/static/js/agents3d.js"></script>
   <script src="/static/js/chat.js"></script>
+  <!-- Module, so Three.js can come from a CDN with no build step. Loads
+       after the classic scripts and enhances what they rendered; if it
+       fails the SVG avatars simply stay. -->
+  <script type="module" src="/static/js/avatar3d.js"></script>
 </body>
 </html>

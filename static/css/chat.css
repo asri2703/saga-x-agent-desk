@@ -396,3 +396,27 @@
 .push-btn[hidden] { display: none !important; }
 .push-btn[data-on="true"] { color: var(--c-done); border-color: var(--c-done); }
 .push-btn:disabled { opacity: .45; cursor: default; }
+
+/* ── 3D avatar ────────────────────────────────────────────────
+   The canvas is layered over the SVG rather than replacing it. The SVG
+   is only hidden once `.has-3d` is set, which happens after a model has
+   actually loaded — so every failure path leaves the original visible.
+   ------------------------------------------------------------ */
+.avatar-wrap { position: relative; }
+
+.avatar-3d {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  border-radius: inherit;
+}
+
+.avatar-wrap.has-3d .avatar-svg { display: none; }
+/* Typing dots belong to the card, not the avatar, so they survive. */
+.avatar-wrap.has-3d .typing-dots { z-index: 2; }
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar-3d { transition: none; }
+}
