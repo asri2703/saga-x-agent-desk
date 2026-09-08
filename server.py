@@ -42,6 +42,11 @@ HISTORY_FILE = ROOT / "api" / "history.jsonl"
 # Auth: shared secret for state-changing endpoints.
 # Set via env var POST_TOKEN; falls back to default for dev convenience.
 POST_TOKEN = os.environ.get("POST_TOKEN", "saga-x-dev-token-change-me")
+# What a person types on the dashboard. Kept separate from POST_TOKEN,
+# which cron and curl send as X-Saga-Token: rotating the one you type
+# should not stop the scheduler, and a machine token should not have to
+# be typeable on a phone. Falls back to POST_TOKEN if unset.
+DESK_PASSWORD = os.environ.get("DESK_PASSWORD", "") or POST_TOKEN
 AUTH_REQUIRED = os.environ.get("AUTH_REQUIRED", "0") == "1"
 
 # Telegram webhook secret — random token in URL path for auth
@@ -584,7 +589,9 @@ class Handler(BaseHTTPRequestHandler):
             token = str(body.get("token", ""))
             if not AUTH_REQUIRED:
                 return self._json_response(200, {"ok": True, "note": "auth disabled"})
-            if not token or not hmac.compare_digest(token, POST_TOKEN):
+            ok = (hmac.compare_digest(token, DESK_PASSWORD)
+                  or hmac.compare_digest(token, POST_TOKEN))
+            if not token or not ok:
                 log(f"LOGIN FAIL from {self.address_string()}")
                 # Deliberately vague: a specific message would confirm
                 # whether a guessed token was close.
