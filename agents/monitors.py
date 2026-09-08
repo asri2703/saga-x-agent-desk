@@ -190,6 +190,44 @@ def _notify(incident: dict, body: str, title: str) -> None:
         pass
 
 
+# ── Incidents not tied to an HTTP monitor ───────────────────────
+
+def _open_generic(title: str, detail: str, severity: str,
+                  suggestion: str) -> dict | None:
+    """One open incident per title, so a repeating check does not stack
+    duplicates every six hours."""
+    if db.select("incidents", filters={"title": title,
+                                       "status": ("in", ["open", "acknowledged"])},
+                 limit=1):
+        return None
+    inc = db.insert("incidents", {
+        "monitor_id": None, "title": title, "detail": detail[:500],
+        "severity": severity, "status": "open", "suggested_action": suggestion,
+    })
+    _notify(inc,
+            f"⚠️ {title}\n{detail}\n\n"
+            f"Suggested: {suggestion}\n\n"
+            f"I have not changed anything.",
+            title)
+    return inc
+
+
+def _resolve_generic(title: str) -> None:
+    for inc in db.select("incidents", filters={
+            "title": title, "status": ("in", ["open", "acknowledged"])}):
+        db.update("incidents", {"id": inc["id"]}, {
+            "status": "resolved", "resolved_at": datetime.now(timezone.utc)})
+        _notify(inc, f"✅ Resolved: {title}", f"Recovered: {title}")
+
+
+def _resolve_generic_prefix(prefix: str) -> None:
+    for inc in db.select("incidents", filters={
+            "status": ("in", ["open", "acknowledged"]), "monitor_id": None}):
+        if str(inc.get("title", "")).startswith(prefix):
+            db.update("incidents", {"id": inc["id"]}, {
+                "status": "resolved", "resolved_at": datetime.now(timezone.utc)})
+
+
 # ── The run ─────────────────────────────────────────────────────
 
 def run_all() -> dict[str, Any]:
@@ -257,6 +295,42 @@ def run_all() -> dict[str, Any]:
                     except Exception as e:
                         pass
 
+    # ── Mastery Signal automation ───────────────────────────────
+    # Checked here rather than as an ordinary HTTP monitor because the
+    # useful signal is not "does the port answer" but "are the crons
+    # running and are the signal counts sane".
+    mastery_note = None
+    try:
+        from . import mastery
+        if mastery.configured():
+            m = mastery.summary()
+            if not m.get("reachable"):
+                # A quick Cloudflare tunnel changes URL on restart, so
+                # unreachable usually means the tunnel moved rather than
+                # the automation dying. Say that, and do not call it down.
+                mastery_note = "Mastery tak dapat disemak"
+                _open_generic(
+                    "Mastery webhook unreachable",
+                    f"{m.get('error')}. The tunnel URL changes when "
+                    f"cloudflared restarts — check MASTERY_WEBHOOK_URL first.",
+                    "warning",
+                    "Confirm the tunnel is up and update MASTERY_WEBHOOK_URL, "
+                    "or move to a named tunnel so the URL stops changing.")
+            elif m.get("alert_count"):
+                mastery_note = f"Mastery {m['alert_count']} alert"
+                _open_generic(
+                    f"Mastery: {m['alert_count']} alert",
+                    "; ".join(str(a) for a in m.get("alerts", []))[:400],
+                    "critical",
+                    "Check the Mastery cron logs on the automation server.")
+            else:
+                _resolve_generic("Mastery webhook unreachable")
+                _resolve_generic_prefix("Mastery: ")
+                if m.get("signals_note"):
+                    mastery_note = f"Mastery signals {m['active_signals']}"
+    except Exception as e:
+        pass
+
     # Honest state. This is the bug from the old script: it must not be
     # possible to report a tick while something is failing.
     avg = int(sum(times) / len(times)) if times else 0
@@ -266,17 +340,25 @@ def run_all() -> dict[str, Any]:
         if len(down) > 2:
             summary += f" +{len(down) - 2}"
         summary += f" · {healthy}/{len(monitors)} healthy"
+        if mastery_note:
+            summary += f" · {mastery_note}"
         state.set_state("alisya", "error", summary[:200], "monitor")
     elif warnings:
         state.set_state("alisya", "idle",
                         f"⚠️ {'; '.join(warnings[:2])} · {healthy}/{len(monitors)} up"[:200],
                         "monitor")
+    elif mastery_note:
+        state.set_state("alisya", "idle",
+                        f"⚠️ {mastery_note} · {healthy}/{len(monitors)} healthy"[:200],
+                        "monitor")
     else:
         state.set_state("alisya", "idle",
-                        f"✅ {healthy}/{len(monitors)} healthy, avg {avg}ms", "monitor")
+                        f"✅ {healthy}/{len(monitors)} healthy + Mastery, avg {avg}ms",
+                        "monitor")
 
     return {"checked": len(monitors), "down": down, "warnings": warnings,
-            "opened": opened, "resolved": resolved, "avg_ms": avg}
+            "opened": opened, "resolved": resolved, "avg_ms": avg,
+            "mastery": mastery_note or "ok"}
 
 
 if __name__ == "__main__":
