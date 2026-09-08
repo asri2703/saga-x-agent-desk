@@ -76,6 +76,95 @@
     }
   }
 
+  // ── Web push ──────────────────────────────────────────────
+  // Permission must come from a real tap. Asking on page load gets the
+  // request denied permanently on some browsers, and on iOS it is
+  // ignored outright unless the PWA was added to the Home Screen.
+  function b64ToBytes(b64) {
+    const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+    const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  }
+
+  const pushSupported = () =>
+    "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+
+  // iOS only allows push from an installed PWA, so say that rather than
+  // letting the button fail silently on an iPhone.
+  const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone = () =>
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true;
+
+  async function initPush() {
+    const btn = $("#push-btn");
+    if (!btn || !pushSupported()) return;
+    btn.hidden = false;
+
+    let reg;
+    try {
+      reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    } catch (err) {
+      btn.hidden = true;
+      return;
+    }
+
+    const existing = await reg.pushManager.getSubscription();
+    paintPush(!!existing);
+
+    btn.addEventListener("click", async () => {
+      if (isIOS() && !isStandalone()) {
+        alert("Di iPhone/iPad, tambah desk ini ke Skrin Utama dahulu " +
+              "(Kongsi → Add to Home Screen), kemudian buka dari sana.");
+        return;
+      }
+      btn.disabled = true;
+      try {
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await fetch("/api/push/unsubscribe", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: sub.endpoint }),
+          });
+          await sub.unsubscribe();
+          paintPush(false);
+          return;
+        }
+        if ((await Notification.requestPermission()) !== "granted") {
+          paintPush(false);
+          return;
+        }
+        const keyRes = await fetch("/api/push/key");
+        const { public_key: key, configured } = await keyRes.json();
+        if (!configured || !key) {
+          alert("Push belum dikonfigurasi di pelayan (VAPID keys).");
+          return;
+        }
+        const fresh = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: b64ToBytes(key),
+        });
+        const res = await api("/api/push/subscribe", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription: fresh.toJSON() }),
+        });
+        paintPush(res.ok);
+      } catch (err) {
+        paintPush(false);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  function paintPush(on) {
+    const btn = $("#push-btn");
+    if (!btn) return;
+    btn.dataset.on = String(!!on);
+    btn.title = on ? "Notifikasi hidup — klik untuk matikan"
+                   : "Hidupkan notifikasi";
+  }
+
   // ── Tabs ──────────────────────────────────────────────────
   function showPanel(name) {
     document.querySelectorAll(".tab").forEach((t) => {
@@ -381,6 +470,7 @@ Tiada apa-apa menunggu kelulusan.</div>`;
     if (form) form.addEventListener("submit", signIn);
 
     checkSession();
+    initPush();
     refreshApprovalCount();
     setInterval(refreshApprovalCount, 30000);
   }

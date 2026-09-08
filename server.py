@@ -401,6 +401,22 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 log(f"chat history failed: {e}")
                 self._json_response(500, {"error": "chat unavailable"})
+        elif path == "/sw.js":
+            # Root scope on purpose: a service worker only controls the
+            # path it is served from. At /static/js/sw.js it would
+            # control /static/ and push would never reach the desk.
+            self._serve_file(ROOT / "sw.js",
+                             "application/javascript; charset=utf-8", send_body)
+        elif path == "/manifest.json":
+            self._serve_file(ROOT / "static" / "manifest.json",
+                             "application/manifest+json; charset=utf-8", send_body)
+        elif path == "/api/push/key":
+            try:
+                from agents import webpush
+                self._json_response(200, {"public_key": webpush.public_key(),
+                                          "configured": webpush.configured()})
+            except Exception as e:
+                self._json_response(500, {"error": str(e)[:150]})
         elif path == "/api/activity":
             if not DB_BACKED:
                 return self._json_response(503, {"error": "agent layer unavailable"})
@@ -538,6 +554,31 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response(200, _jsonable(result))
             except Exception as e:
                 self._json_response(400, {"error": str(e)[:300]})
+        elif path.startswith("/api/push/"):
+            if not DB_BACKED:
+                return self._json_response(503, {"error": "agent layer unavailable"})
+            if not self._authorised():
+                return self._json_response(401, {"error": "unauthorized"})
+            action = path[len("/api/push/"):].strip("/")
+            body = self._read_json() or {}
+            try:
+                from agents import webpush
+                if action == "subscribe":
+                    res = webpush.subscribe(
+                        body.get("subscription") or {},
+                        user_agent=self.headers.get("User-Agent", ""),
+                        label=body.get("label", ""))
+                elif action == "unsubscribe":
+                    res = webpush.unsubscribe(body.get("endpoint", ""))
+                elif action == "test":
+                    res = webpush.send("Saga X Desk",
+                                       "Notifikasi berfungsi.", url="/")
+                else:
+                    return self._json_response(404, {"error": "unknown action"})
+                self._json_response(200, res)
+            except Exception as e:
+                log(f"push {action} failed: {e}")
+                self._json_response(500, {"error": str(e)[:200]})
         elif path == "/api/login":
             body = self._read_json() or {}
             token = str(body.get("token", ""))

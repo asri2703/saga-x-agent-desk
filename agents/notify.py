@@ -79,7 +79,16 @@ def drain() -> dict:
         text = f"{title}\n\n{n.get('body') or ''}".strip()
 
         results = [send_telegram(c, text) for c in recipients]
-        if any(ok for ok, _ in results):
+
+        # Web push runs alongside, not instead. It must never be able to
+        # cost a notification its Telegram delivery, hence the catch.
+        try:
+            from . import webpush
+            push = webpush.send(title, (n.get("body") or "")[:300], url="/")
+        except Exception as e:
+            push = {"sent": 0, "error": str(e)[:120]}
+
+        if any(ok for ok, _ in results) or push.get("sent"):
             db.update("notifications", {"id": n["id"]}, {
                 "delivered": True,
                 "sent_at": datetime.now(timezone.utc),

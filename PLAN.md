@@ -199,7 +199,11 @@ call; real operational context pushed them past the line.
       "setiap hari 9 pagi" arrive at 5pm.
 - [ ] **10. Delisha → Julia → Farah.** Julia is largest: three revenue models + approvals.
 - [ ] **11. Putri last** — she reads across the others *and* runs the live sales funnel.
-- [ ] **12. PWA push.** HTTPS is already there; Telegram works first.
+- [x] **12. PWA push.** Manifest, service worker at root scope, icons, VAPID keys,
+      subscription store. Sends alongside Telegram, never instead — a notification
+      counts as delivered if either channel took it. On iOS the button explains that
+      the PWA must be added to the Home Screen first, because a Safari tab cannot
+      subscribe no matter how the permission is requested.
 
 ## Open
 

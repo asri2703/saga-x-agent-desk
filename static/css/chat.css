@@ -378,3 +378,21 @@
   .act-item { flex-wrap: wrap; gap: 6px 10px; }
   .act-item .what { flex-basis: 100%; }
 }
+
+/* ── Push button ──────────────────────────────────────────── */
+.push-btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  padding: 6px 9px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, opacity .15s;
+}
+.push-btn:hover { color: var(--text); border-color: var(--accent-2); }
+.push-btn[hidden] { display: none !important; }
+.push-btn[data-on="true"] { color: var(--c-done); border-color: var(--c-done); }
+.push-btn:disabled { opacity: .45; cursor: default; }

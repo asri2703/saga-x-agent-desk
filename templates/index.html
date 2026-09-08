@@ -8,6 +8,10 @@
   <title>Saga X — Agent Desk</title>
   <link rel="stylesheet" href="/static/css/styles.css">
   <link rel="stylesheet" href="/static/css/chat.css">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2a1f4d">
+  <meta name="apple-mobile-web-app-title" content="Saga X">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%91%A5%3C/text%3E%3C/svg%3E">
 </head>
 <body>
@@ -18,6 +22,7 @@
     </div>
     <div class="meta">
       <span id="last-updated" class="muted">connecting…</span>
+      <button id="push-btn" class="push-btn" hidden title="Hidupkan notifikasi">🔔</button>
       <span id="conn-status" class="status-pill status-pill--connecting">●</span>
     </div>
   </header>
