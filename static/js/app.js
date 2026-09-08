@@ -118,6 +118,9 @@
       if (d) updateCard(id, d);
     }
     $lastUpdated.textContent = `live · ${new Date().toLocaleTimeString()}`;
+    // Feed the same state to the chat sidebar so it cannot drift from
+    // the cards by polling separately.
+    if (window.__sagaxChat) window.__sagaxChat.paintStates(data);
   }
 
   function setConn(ok, msg) {

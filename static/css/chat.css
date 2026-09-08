@@ -1,0 +1,380 @@
+/* ============================================================
+   Saga X Agent Desk — chat + approvals
+   Uses the tokens already defined in styles.css; no new palette.
+   ============================================================ */
+
+/* ── Tabs ─────────────────────────────────────────────────── */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.tab {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+}
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* Count badge — only rendered when there is something waiting. */
+.tab .badge {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 9px;
+  background: var(--c-working);
+  color: #2a1f4d;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.panel[hidden] { display: none !important; }
+
+/* ── Chat layout ──────────────────────────────────────────── */
+.chat-wrap {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 16px;
+  padding: 16px;
+  height: calc(100vh - 190px);
+  min-height: 420px;
+}
+
+.chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.chat-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.chat-person:hover { background: var(--surface); color: var(--text); }
+.chat-person[aria-current="true"] {
+  background: var(--surface-strong);
+  border-color: var(--border);
+  color: var(--text);
+}
+.chat-person .who { display: flex; flex-direction: column; line-height: 1.25; }
+.chat-person .role { font-size: 11px; color: var(--text-faint); }
+.chat-person .pip {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--c-idle); flex: none;
+}
+.chat-person .pip[data-state="thinking"] { background: var(--c-thinking); }
+.chat-person .pip[data-state="working"]  { background: var(--c-working); }
+.chat-person .pip[data-state="done"]     { background: var(--c-done); }
+.chat-person .pip[data-state="error"]    { background: var(--c-error); }
+.chat-person .pip[data-state="offline"]  { background: var(--c-offline); }
+
+.chat-main {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.chat-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.chat-head h2 { font-size: 15px; font-weight: 600; }
+.chat-head .role { font-size: 12px; color: var(--text-faint); }
+.chat-head .spend { margin-left: auto; font-size: 11px; color: var(--text-faint); }
+
+.chat-thread {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.msg {
+  max-width: 78%;
+  padding: 10px 13px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.msg.user {
+  align-self: flex-end;
+  background: var(--accent-2);
+  color: #1a1530;
+  border-bottom-right-radius: 4px;
+}
+.msg.assistant {
+  align-self: flex-start;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+.msg.pending { opacity: .6; font-style: italic; }
+.msg strong { font-weight: 700; }
+
+.chat-empty {
+  margin: auto;
+  color: var(--text-faint);
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.7;
+}
+
+.chat-form {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+.chat-form textarea {
+  flex: 1;
+  resize: none;
+  min-height: 42px;
+  max-height: 140px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, .22);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.chat-form textarea:focus {
+  outline: none;
+  border-color: var(--accent-2);
+}
+.chat-form button {
+  padding: 0 18px;
+  border-radius: 10px;
+  border: 0;
+  background: var(--accent);
+  color: #2a1f4d;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.chat-form button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ── Approvals ────────────────────────────────────────────── */
+.approvals-wrap { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+.approval {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--c-working);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 14px 16px;
+}
+.approval[data-risk="outbound"] { border-left-color: var(--accent); }
+.approval[data-risk="destructive"] { border-left-color: var(--c-error); }
+
+.approval .summary { font-size: 15px; line-height: 1.45; margin-bottom: 8px; }
+.approval .meta {
+  display: flex; flex-wrap: wrap; gap: 12px;
+  font-size: 12px; color: var(--text-faint); margin-bottom: 12px;
+}
+.approval .amount { color: var(--c-working); font-weight: 700; }
+
+.approval .actions { display: flex; gap: 8px; }
+.approval button {
+  padding: 8px 16px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.approval button.approve {
+  background: var(--c-done); border-color: var(--c-done); color: #10281f;
+  font-weight: 600;
+}
+.approval button.reject:hover { border-color: var(--c-error); color: var(--c-error); }
+.approval button:disabled { opacity: .5; cursor: not-allowed; }
+
+.approvals-empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 14px;
+}
+
+/* ── Small screens ────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .chat-wrap {
+    grid-template-columns: 1fr;
+    height: calc(100vh - 210px);
+  }
+  .chat-list {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .chat-person { flex: none; }
+  .chat-person .role { display: none; }
+  .msg { max-width: 90%; }
+}
+
+/* ── Sign in ──────────────────────────────────────────────── */
+.signin {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(26, 21, 48, .92);
+  backdrop-filter: blur(6px);
+}
+.signin[hidden] { display: none !important; }
+
+.signin-card {
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 26px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-strong);
+}
+.signin-card h2 { font-size: 17px; font-weight: 600; }
+.signin-card .muted { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+
+.signin-card input {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, .28);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+}
+.signin-card input:focus { outline: none; border-color: var(--accent-2); }
+
+.signin-card button {
+  padding: 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #2a1f4d;
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+}
+.signin-card button:disabled { opacity: .5; cursor: not-allowed; }
+
+.signin-error { color: var(--c-error); font-size: 13px; }
+.signin-error[hidden] { display: none; }
+
+/* ── Activity ─────────────────────────────────────────────── */
+.activity-wrap { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+
+.activity-head { display: flex; align-items: center; gap: 12px; }
+.activity-head h2 { font-size: 16px; font-weight: 600; }
+.activity-head select {
+  margin-left: auto;
+  padding: 7px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, .25);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+.stat {
+  padding: 13px 15px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.stat .n { font-size: 21px; font-weight: 700; line-height: 1.2; }
+.stat .k {
+  font-size: 11px; color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: .06em; margin-top: 3px;
+}
+.stat.warn .n { color: var(--c-working); }
+.stat.bad  .n { color: var(--c-error); }
+.stat.good .n { color: var(--c-done); }
+
+.act-section > h3 {
+  font-size: 12px; font-weight: 600; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px;
+}
+
+.act-list { display: flex; flex-direction: column; gap: 6px; }
+.act-item {
+  display: flex; gap: 12px; align-items: baseline;
+  padding: 9px 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+}
+.act-item .when { color: var(--text-faint); font-size: 11px; flex: none; min-width: 84px; }
+.act-item .who  { font-weight: 600; flex: none; min-width: 62px; }
+.act-item .what { flex: 1; color: var(--text-dim); overflow-wrap: anywhere; }
+.act-item .cost { color: var(--text-faint); font-size: 11px; flex: none; }
+
+.act-item[data-status="failed"]  { border-left: 3px solid var(--c-error); }
+.act-item[data-status="done"]    { border-left: 3px solid var(--c-done); }
+.act-item[data-status="open"]    { border-left: 3px solid var(--c-error); }
+.act-item[data-status="resolved"]{ border-left: 3px solid var(--c-done); }
+.act-item[data-status="executed"]{ border-left: 3px solid var(--c-done); }
+.act-item[data-status="rejected"]{ border-left: 3px solid var(--text-faint); }
+.act-item[data-status="pending"] { border-left: 3px solid var(--c-working); }
+
+.act-empty { color: var(--text-faint); font-size: 13px; padding: 10px 2px; }
+
+@media (max-width: 720px) {
+  .act-item { flex-wrap: wrap; gap: 6px 10px; }
+  .act-item .what { flex-basis: 100%; }
+}

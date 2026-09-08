@@ -7,6 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Saga X — Agent Desk</title>
   <link rel="stylesheet" href="/static/css/styles.css">
+  <link rel="stylesheet" href="/static/css/chat.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%91%A5%3C/text%3E%3C/svg%3E">
 </head>
 <body>
@@ -21,19 +22,79 @@
     </div>
   </header>
 
-  <main class="office">
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-panel="desk" aria-selected="true">Desk</button>
+    <button class="tab" role="tab" data-panel="chat" aria-selected="false">Chat</button>
+    <button class="tab" role="tab" data-panel="approvals" aria-selected="false">Kelulusan</button>
+    <button class="tab" role="tab" data-panel="activity" aria-selected="false">Aktiviti</button>
+  </nav>
+
+  <!-- ── Desk ─────────────────────────────────────────────── -->
+  <main class="office panel" data-panel="desk">
     <div class="office-bg"></div>
     <section class="agents" id="agents">
-      <!-- agent cards injected by JS -->
+      <!-- agent cards injected by app.js -->
     </section>
   </main>
 
+  <!-- ── Chat ─────────────────────────────────────────────── -->
+  <section class="panel chat-wrap" data-panel="chat" hidden>
+    <div class="chat-list" id="chat-list"><!-- injected by chat.js --></div>
+
+    <div class="chat-main">
+      <div class="chat-head">
+        <h2 id="chat-who">Delisha</h2>
+        <span class="role" id="chat-role">COO</span>
+        <span class="spend" id="chat-spend"></span>
+      </div>
+      <div class="chat-thread" id="chat-thread"></div>
+      <div class="chat-form">
+        <textarea id="chat-input" rows="1"
+                  placeholder="Beri tugasan… (Enter hantar, Shift+Enter baris baru)"></textarea>
+        <button id="chat-send">Hantar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Approvals ────────────────────────────────────────── -->
+  <section class="panel approvals-wrap" data-panel="approvals" id="approvals-wrap" hidden>
+  </section>
+
+  <!-- ── Activity: what happened this week ────────────────── -->
+  <section class="panel activity-wrap" data-panel="activity" hidden>
+    <div class="activity-head">
+      <h2>Apa yang berlaku</h2>
+      <select id="activity-range">
+        <option value="7" selected>7 hari</option>
+        <option value="14">14 hari</option>
+        <option value="30">30 hari</option>
+      </select>
+    </div>
+    <div id="activity-body"></div>
+  </section>
+
+  <!-- ── Sign in ──────────────────────────────────────────── -->
+  <!-- Shown only when the server says auth is on and this browser has
+       no valid session. The token is exchanged for an HttpOnly cookie
+       and never kept in JavaScript. -->
+  <div class="signin" id="signin" hidden>
+    <form class="signin-card" id="signin-form">
+      <h2>Saga X Agent Desk</h2>
+      <p class="muted">Masukkan token akses untuk memberi arahan.</p>
+      <input type="password" id="signin-token" autocomplete="current-password"
+             placeholder="Token akses" required>
+      <button type="submit" id="signin-go">Masuk</button>
+      <span class="signin-error" id="signin-error" hidden></span>
+    </form>
+  </div>
+
   <footer class="footer">
     <span class="muted">Saga X Ventures Marketing Agency · Marketing Agency Command Center</span>
-    <span class="muted">v1.0 · stdlib Python · no npm</span>
+    <span class="muted">v2.0 · Postgres · gpt-5.6</span>
   </footer>
 
   <script src="/static/js/avatars.js"></script>
   <script src="/static/js/app.js"></script>
+  <script src="/static/js/chat.js"></script>
 </body>
 </html>

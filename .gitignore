@@ -17,3 +17,31 @@ logs/*.log
 .idea/
 *.swp
 *~
+
+# Local archives / transfer bundles
+_archive/
+
+# Secrets — NEVER commit. .env.example is the safe template.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Transient DSN written during validation — holds a password
+.dsn_ok
+
+# Local env exports — real secrets despite the .example suffix
+dot-env-*
+*-env.example
+!.env.example
+
+# GCP service account keys — downloaded with names like
+# project-id-a1b2c3d4.json. Long-lived credentials; never commit.
+*-*.json
+!package.json
+!tsconfig.json
+!.vscode/*.json
+gcp-*.json
+service-account*.json
+credentials*.json
