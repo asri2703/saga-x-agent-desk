@@ -266,6 +266,191 @@ def set_assignment_enabled(_agent: str, assignment_id: str,
     return {"ok": True, "title": rows[0]["title"], "enabled": enabled}
 
 
+# ── Alisya's own workspace ──────────────────────────────────────
+# Managing what she watches is her job, not remediation. The line is
+# the machines: she may change her watchlist and her incident records,
+# she may not touch DNS, nginx, or a server.
+
+def add_monitor(_agent: str, name: str, target: str, kind: str = "https",
+                business: str = "", interval_mins: int = 360,
+                fail_threshold: int = 2) -> dict:
+    existing = db.select("monitors", filters={"kind": kind, "target": target}, limit=1)
+    if existing:
+        return {"error": f"already monitored: {target}",
+                "monitor_id": str(existing[0]["id"])}
+    row = db.insert("monitors", {
+        "name": name, "target": target, "kind": kind,
+        "business_id": business or None, "owner_agent": _agent,
+        "interval_mins": interval_mins, "fail_threshold": fail_threshold,
+    })
+    return {"ok": True, "monitor": _json_safe(row)}
+
+
+def set_monitor_enabled(_agent: str, target: str, enabled: bool = True) -> dict:
+    rows = db.update("monitors", {"target": target}, {"enabled": enabled})
+    if not rows:
+        return {"error": f"no monitor for {target}"}
+    # A monitor turned off should not leave its incident hanging open.
+    if not enabled:
+        for inc in db.select("incidents",
+                             filters={"monitor_id": rows[0]["id"],
+                                      "status": ("in", ["open", "acknowledged"])}):
+            db.update("incidents", {"id": inc["id"]}, {
+                "status": "resolved", "resolved_at": datetime.now(),
+            })
+    return {"ok": True, "target": target, "enabled": enabled,
+            "note": "Monitoring stopped; open incidents closed."
+                    if not enabled else "Monitoring resumed."}
+
+
+def resolve_incident(_agent: str, incident_id: str, note: str = "") -> dict:
+    """Close an incident. Bookkeeping — it records that the matter is
+    settled, it does not fix anything."""
+    rows = db.update("incidents", {"id": incident_id}, {
+        "status": "resolved", "resolved_at": datetime.now(),
+        "suggested_action": note or None,
+    })
+    if not rows:
+        return {"error": "no incident with that id"}
+    return {"ok": True, "title": rows[0]["title"], "status": "resolved"}
+
+
+def acknowledge_incident(_agent: str, incident_id: str) -> dict:
+    rows = db.update("incidents", {"id": incident_id}, {
+        "status": "acknowledged", "acknowledged_at": datetime.now()})
+    if not rows:
+        return {"error": "no incident with that id"}
+    return {"ok": True, "title": rows[0]["title"], "status": "acknowledged"}
+
+
+# ── Records ─────────────────────────────────────────────────────
+
+def create_client(_agent: str, name: str, business: str = "", company: str = "",
+                  email: str = "", phone: str = "", whatsapp: str = "",
+                  status: str = "lead", source: str = "", notes: str = "") -> dict:
+    dupes = db.select("clients", filters={"name": name}, limit=1)
+    if dupes:
+        return {"error": f"a client named '{name}' already exists",
+                "client_id": str(dupes[0]["id"])}
+    row = db.insert("clients", {
+        "name": name, "business_id": business or None, "company": company or None,
+        "email": email or None, "phone": phone or None,
+        "whatsapp": whatsapp or None, "status": status,
+        "source": source or None, "notes": notes or None,
+    })
+    return {"ok": True, "client": _json_safe(row)}
+
+
+def update_client(_agent: str, client_id: str, **fields) -> dict:
+    allowed = {"name", "company", "email", "phone", "whatsapp",
+               "status", "source", "notes", "business_id"}
+    patch = {k: v for k, v in fields.items() if k in allowed and v not in ("", None)}
+    if not patch:
+        return {"error": f"nothing to update. fields: {sorted(allowed)}"}
+    patch["updated_at"] = datetime.now()
+    rows = db.update("clients", {"id": client_id}, patch)
+    if not rows:
+        return {"error": "no client with that id"}
+    return {"ok": True, "client": _json_safe(rows[0])}
+
+
+def update_content(_agent: str, content_id: str, status: str = "",
+                   title: str = "", body: str = "", publish_at: str = "") -> dict:
+    patch: dict[str, Any] = {}
+    if status:
+        patch["status"] = status
+        if status == "published":
+            return {"error": "publishing is not connected — Buffer is on hold. "
+                             "Use 'scheduled' and tell Abang."}
+    for k, v in (("title", title), ("body", body), ("publish_at", publish_at)):
+        if v:
+            patch[k] = v
+    if not patch:
+        return {"error": "nothing to update"}
+    patch["updated_at"] = datetime.now()
+    rows = db.update("content", {"id": content_id}, patch)
+    if not rows:
+        return {"error": "no content with that id"}
+    return {"ok": True, "content": _json_safe(rows[0])}
+
+
+def create_booking(_agent: str, space_name: str, starts_at: str, ends_at: str,
+                   client_id: str = "", headcount: int | None = None,
+                   quoted_total: float | None = None, notes: str = "") -> dict:
+    """A booking records what was agreed. The invoice that follows is
+    where the money gate sits."""
+    row = db.insert("bookings", {
+        "space_name": space_name, "starts_at": starts_at, "ends_at": ends_at,
+        "client_id": client_id or None, "headcount": headcount,
+        "quoted_total": quoted_total, "notes": notes or None,
+        "status": "pending",
+    })
+    return {"ok": True, "booking": _json_safe(row)}
+
+
+def create_subscription(_agent: str, client_id: str = "", telegram_user: str = "",
+                        amount: float | None = None, renews_on: str = "",
+                        service_id: str = "", notes: str = "") -> dict:
+    row = db.insert("subscriptions", {
+        "client_id": client_id or None, "telegram_user": telegram_user or None,
+        "service_id": service_id or None, "amount": amount,
+        "renews_on": renews_on or None, "notes": notes or None,
+        "status": "active",
+    })
+    return {"ok": True, "subscription": _json_safe(row)}
+
+
+# ── Money: these queue, they do not act ─────────────────────────
+# Each builds its own well-formed payload rather than asking the model
+# to construct a generic one — a malformed payload fails at execution,
+# after Abang has already approved it.
+
+def set_service_price(_agent: str, name: str, unit_price: float,
+                      business: str = "agency", kind: str = "service",
+                      unit: str = "per_project", billing_period: str = "",
+                      description: str = "", run_id: str | None = None) -> dict:
+    return request_approval(
+        _agent, "create_service",
+        f"Set harga: {name} — {business} — MYR {unit_price:,.2f} {unit}",
+        {"name": name, "unit_price": unit_price, "business_id": business,
+         "kind": kind, "unit": unit,
+         "billing_period": billing_period or None,
+         "description": description or None},
+        risk="money", amount=unit_price, run_id=run_id)
+
+
+def record_expense(_agent: str, description: str, amount: float,
+                   business: str = "", category: str = "",
+                   spent_on: str = "", run_id: str | None = None) -> dict:
+    return request_approval(
+        _agent, "record_expense",
+        f"Rekod perbelanjaan: {description} — MYR {amount:,.2f}",
+        {"description": description, "amount": amount,
+         "business_id": business or None, "category": category or None,
+         "spent_on": spent_on or None},
+        risk="money", amount=amount, run_id=run_id)
+
+
+def update_invoice_status(_agent: str, invoice_id: str, status: str = "",
+                          amount_paid: float | None = None,
+                          run_id: str | None = None) -> dict:
+    inv = db.select_one("invoices", filters={"id": invoice_id})
+    if not inv:
+        return {"error": "no invoice with that id"}
+    if amount_paid is not None:
+        return request_approval(
+            _agent, "record_payment",
+            f"Rekod bayaran {inv['currency']} {amount_paid:,.2f} "
+            f"untuk invois {inv['number']}",
+            {"invoice_id": invoice_id, "amount": amount_paid},
+            risk="money", amount=amount_paid, run_id=run_id)
+    return request_approval(
+        _agent, "set_invoice_status",
+        f"Tukar status invois {inv['number']} kepada {status}",
+        {"invoice_id": invoice_id, "status": status},
+        risk="money", run_id=run_id)
+
+
 def request_approval(_agent: str, action_type: str, summary: str,
                      payload: dict | str, risk: str = "money",
                      amount: float | None = None, context: str = "",
@@ -418,6 +603,88 @@ REGISTRY: dict[str, tuple[Callable, str, dict]] = {
         "set_assignment_enabled", "Turn a standing instruction on or off.",
         {"assignment_id": S, "enabled": {"type": "boolean"}}, ["assignment_id"])),
 
+    "add_monitor": (add_monitor, FREE, _t(
+        "add_monitor", "Start watching a domain or endpoint.",
+        {"name": S, "target": {**S, "description": "domain, no scheme"},
+         "kind": {**S, "enum": ["https", "dns", "ssl", "cron", "telegram_bot", "custom"]},
+         "business": {**S, "enum": ["agency", "space", "signals"]},
+         "interval_mins": I, "fail_threshold": I}, ["name", "target"])),
+
+    "set_monitor_enabled": (set_monitor_enabled, FREE, _t(
+        "set_monitor_enabled",
+        "Turn monitoring of a target on or off. Turning it off also closes any "
+        "incident still open for it. Use when Abang says a domain is retired — "
+        "a monitor left failing forever teaches him to ignore your alerts.",
+        {"target": S, "enabled": {"type": "boolean"}}, ["target"])),
+
+    "acknowledge_incident": (acknowledge_incident, FREE, _t(
+        "acknowledge_incident", "Mark an incident as seen and being handled.",
+        {"incident_id": S}, ["incident_id"])),
+
+    "resolve_incident": (resolve_incident, FREE, _t(
+        "resolve_incident",
+        "Close an incident. Records that the matter is settled; it does not fix "
+        "anything and does not imply you did.",
+        {"incident_id": S, "note": S}, ["incident_id"])),
+
+    "create_client": (create_client, FREE, _t(
+        "create_client", "Add a client. A record, not money — no approval needed.",
+        {"name": S, "business": {**S, "enum": ["agency", "space", "signals"]},
+         "company": S, "email": S, "phone": S, "whatsapp": S,
+         "status": {**S, "enum": ["lead", "active", "dormant", "lost"]},
+         "source": S, "notes": S}, ["name"])),
+
+    "update_client": (update_client, FREE, _t(
+        "update_client", "Change a client's details.",
+        {"client_id": S, "name": S, "company": S, "email": S, "phone": S,
+         "whatsapp": S, "status": S, "source": S, "notes": S}, ["client_id"])),
+
+    "update_content": (update_content, FREE, _t(
+        "update_content",
+        "Move a content item along, or edit it. You cannot set 'published' — "
+        "Buffer is not connected and claiming otherwise would be a lie.",
+        {"content_id": S,
+         "status": {**S, "enum": ["idea", "drafting", "review", "scheduled", "archived"]},
+         "title": S, "body": S, "publish_at": S}, ["content_id"])),
+
+    "create_booking": (create_booking, FREE, _t(
+        "create_booking",
+        "Record a hall or space booking — a slot in time, not a project.",
+        {"space_name": S, "starts_at": {**S, "description": "ISO datetime"},
+         "ends_at": S, "client_id": S, "headcount": I, "quoted_total": N,
+         "notes": S}, ["space_name", "starts_at", "ends_at"])),
+
+    "create_subscription": (create_subscription, FREE, _t(
+        "create_subscription", "Record a recurring signal subscription.",
+        {"client_id": S, "telegram_user": S, "amount": N,
+         "renews_on": {**S, "description": "YYYY-MM-DD"},
+         "service_id": S, "notes": S})),
+
+    "set_service_price": (set_service_price, APPROVAL, _t(
+        "set_service_price",
+        "Record a price Abang has given you. Queues for his approval; the price "
+        "is not live until he confirms. Never invent the number.",
+        {"name": S, "unit_price": N,
+         "business": {**S, "enum": ["agency", "space", "signals"]},
+         "kind": {**S, "enum": ["service", "product", "subscription"]},
+         "unit": {**S, "enum": ["per_project", "per_month", "per_hour", "per_day",
+                                "per_booking", "per_item", "per_campaign"]},
+         "billing_period": {**S, "enum": ["monthly", "quarterly", "yearly"]},
+         "description": S}, ["name", "unit_price"])),
+
+    "record_expense": (record_expense, APPROVAL, _t(
+        "record_expense", "Queue an expense for approval.",
+        {"description": S, "amount": N,
+         "business": {**S, "enum": ["agency", "space", "signals"]},
+         "category": S, "spent_on": S}, ["description", "amount"])),
+
+    "update_invoice_status": (update_invoice_status, APPROVAL, _t(
+        "update_invoice_status",
+        "Queue a payment record or an invoice status change for approval.",
+        {"invoice_id": S, "status": {**S, "enum": ["draft", "sent", "partial",
+                                                   "paid", "overdue", "void"]},
+         "amount_paid": N}, ["invoice_id"])),
+
     "request_approval": (request_approval, APPROVAL, _t(
         "request_approval",
         "Queue an action needing Abang's approval — invoices, prices, payments, "
@@ -439,15 +706,22 @@ AGENT_TOOLS: dict[str, list[str]] = {
               "list_incidents", "monitor_status",
               "create_assignment", "list_assignments", "set_assignment_enabled"],
     "alisya": ["set_my_state", "monitor_status", "list_incidents",
-               "list_tasks", "create_task", "create_assignment", "list_assignments", "set_assignment_enabled"],
+               "list_tasks", "create_task", "create_assignment", "list_assignments", "set_assignment_enabled",
+               "add_monitor", "set_monitor_enabled", "acknowledge_incident", "resolve_incident"],
     "julia": ["set_my_state", "business_summary", "list_clients", "list_services",
               "list_invoices", "list_bookings", "list_tasks", "create_task",
-              "request_approval", "create_assignment", "list_assignments", "set_assignment_enabled"],
+              "request_approval", "create_assignment", "list_assignments",
+              "set_assignment_enabled", "create_client", "update_client",
+              "set_service_price", "record_expense", "update_invoice_status",
+              "create_booking", "create_subscription"],
     "farah": ["set_my_state", "list_content", "draft_content", "list_clients",
-              "list_tasks", "create_task", "request_approval", "create_assignment", "list_assignments", "set_assignment_enabled"],
+              "list_tasks", "create_task", "request_approval", "create_assignment",
+              "list_assignments", "set_assignment_enabled", "update_content",
+              "create_client", "update_client"],
     "delisha": ["set_my_state", "business_summary", "list_tasks", "create_task",
                 "update_task", "list_clients", "list_invoices", "list_content",
-                "create_assignment", "list_assignments", "set_assignment_enabled"],
+                "create_assignment", "list_assignments", "set_assignment_enabled",
+                "create_client", "update_client"],
 }
 
 

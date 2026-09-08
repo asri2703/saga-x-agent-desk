@@ -141,7 +141,40 @@ def _exec_record_payment(approval: dict, payload: dict) -> dict:
             "status": status}
 
 
+def _exec_set_invoice_status(approval: dict, payload: dict) -> dict:
+    invoice_id, status = payload.get("invoice_id"), payload.get("status")
+    if not invoice_id or not status:
+        raise ApprovalError("needs invoice_id and status")
+    patch: dict[str, Any] = {"status": status}
+    if status == "paid":
+        inv = db.select_one("invoices", filters={"id": invoice_id})
+        if inv:
+            patch["amount_paid"] = inv["total"]
+        patch["paid_at"] = datetime.now(timezone.utc)
+    rows = db.update("invoices", {"id": invoice_id}, patch)
+    if not rows:
+        raise ApprovalError("no invoice with that id")
+    return {"invoice": rows[0]["number"], "status": status}
+
+
+def _exec_record_expense(approval: dict, payload: dict) -> dict:
+    if not payload.get("description") or payload.get("amount") is None:
+        raise ApprovalError("expense needs a description and an amount")
+    row = db.insert("expenses", {
+        "description": payload["description"],
+        "amount": Decimal(str(payload["amount"])),
+        "business_id": payload.get("business_id"),
+        "category": payload.get("category"),
+        "spent_on": payload.get("spent_on"),
+        "notes": payload.get("notes"),
+    })
+    return {"expense_id": str(row["id"]), "amount": float(row["amount"]),
+            "description": row["description"]}
+
+
 EXECUTORS: dict[str, Callable[[dict, dict], dict]] = {
+    "set_invoice_status": _exec_set_invoice_status,
+    "record_expense": _exec_record_expense,
     "create_invoice": _exec_create_invoice,
     "create_service": _exec_upsert_service,
     "update_price": _exec_upsert_service,
