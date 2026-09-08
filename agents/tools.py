@@ -18,6 +18,7 @@ tools will find a wrong one.
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime
 from typing import Any, Callable
 
@@ -273,6 +274,104 @@ def mastery_status(_agent: str) -> dict:
     and does not touch it."""
     from . import mastery
     return _json_safe(mastery.summary())
+
+
+# ── Sites ───────────────────────────────────────────────────────
+# Drafting is free; publishing to the public internet is not. Same
+# shape as content: write freely, ship only with approval.
+
+ALLOWED_SITE_EXT = (".html", ".css", ".js", ".json", ".txt", ".svg", ".xml", ".webmanifest")
+MAX_SITE_BYTES = 2_000_000
+
+
+def build_site(_agent: str, name: str, domain: str, pages: list | str,
+               brief: str = "", business: str = "") -> dict:
+    """Create or replace a site draft. Nothing is published by this.
+
+    `pages` is [{"path": "index.html", "content": "<!doctype html>..."}].
+    Paths are restricted to static web files and cannot escape the site
+    directory — a payload is replayed verbatim on approval, so a path
+    like ../../etc would be written exactly as given."""
+    if isinstance(pages, str):
+        try:
+            pages = json.loads(pages)
+        except json.JSONDecodeError:
+            return {"error": "pages must be a list of {path, content}"}
+    if not isinstance(pages, list) or not pages:
+        return {"error": "pages must be a non-empty list of {path, content}"}
+
+    domain = domain.strip().lower().replace("https://", "").replace("http://", "").strip("/")
+    if not re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", domain):
+        return {"error": f"not a valid domain: {domain}"}
+
+    clean, total = [], 0
+    for pg in pages:
+        path = str(pg.get("path", "")).strip().lstrip("/")
+        body = pg.get("content") or ""
+        if not path or ".." in path or path.startswith(("/", "\\")) or ":" in path:
+            return {"error": f"unsafe path: {path!r}"}
+        if not path.lower().endswith(ALLOWED_SITE_EXT):
+            return {"error": f"file type not allowed: {path!r}. "
+                             f"allowed: {', '.join(ALLOWED_SITE_EXT)}"}
+        total += len(body)
+        clean.append({"path": path, "content": body})
+    if total > MAX_SITE_BYTES:
+        return {"error": f"site is {total} bytes; limit is {MAX_SITE_BYTES}"}
+    if not any(p["path"] == "index.html" for p in clean):
+        return {"error": "a site needs an index.html"}
+
+    existing = db.select_one("sites", filters={"domain": domain})
+    if existing:
+        site = db.update("sites", {"id": existing["id"]}, {
+            "name": name, "brief": brief or existing.get("brief"),
+            "status": "draft", "updated_at": datetime.now()})[0]
+        db.delete("site_files", {"site_id": site["id"]})
+    else:
+        site = db.insert("sites", {
+            "name": name, "domain": domain, "brief": brief or None,
+            "business_id": business or None, "created_by": _agent,
+            "status": "draft"})
+
+    for pg in clean:
+        db.insert("site_files", {"site_id": site["id"], **pg})
+
+    return {"ok": True, "site_id": str(site["id"]), "domain": domain,
+            "files": [p["path"] for p in clean], "bytes": total,
+            "note": "Saved as a draft. Nothing is public until Abang "
+                    "approves a publish."}
+
+
+def list_sites(_agent: str) -> dict:
+    return {"sites": _json_safe(db.select("sites_overview"))}
+
+
+def get_site_file(_agent: str, domain: str, path: str = "index.html") -> dict:
+    site = db.select_one("sites", filters={"domain": domain.lower()})
+    if not site:
+        return {"error": f"no site for {domain}"}
+    f = db.select_one("site_files", filters={"site_id": site["id"], "path": path})
+    if not f:
+        return {"error": f"no file {path} in {domain}"}
+    return {"path": path, "content": f["content"]}
+
+
+def publish_site(_agent: str, domain: str, run_id: str | None = None) -> dict:
+    """Queue a site for publication. Does not publish."""
+    domain = domain.strip().lower()
+    site = db.select_one("sites", filters={"domain": domain})
+    if not site:
+        return {"error": f"no site for {domain}. Build it first."}
+    files = db.select("site_files", filters={"site_id": site["id"]}, columns="path")
+    if not files:
+        return {"error": "site has no files"}
+    db.update("sites", {"id": site["id"]}, {"status": "pending"})
+    return request_approval(
+        _agent, "publish_site",
+        f"Terbitkan {site['name']} ke {domain} ({len(files)} fail)",
+        {"site_id": str(site["id"]), "domain": domain},
+        risk="outbound",
+        context=f"Files: {', '.join(f['path'] for f in files)}",
+        run_id=run_id)
 
 
 # ── Alisya's own workspace ──────────────────────────────────────
@@ -619,6 +718,34 @@ REGISTRY: dict[str, tuple[Callable, str, dict]] = {
         "check did not happen, which is not the same as everything being fine.",
         {})),
 
+    "build_site": (build_site, FREE, _t(
+        "build_site",
+        "Create or replace a website draft: complete files, ready to publish. "
+        "Static only — HTML, CSS, JS, images as SVG. Nothing becomes public "
+        "until Abang approves a publish, so write the real thing rather than a "
+        "sketch. Replaces every file for that domain, so send the whole site.",
+        {"name": S, "domain": {**S, "description": "e.g. space2.sagaxventures.com"},
+         "pages": {"type": "array", "description": "[{path, content}], must include index.html",
+                   "items": {"type": "object",
+                             "properties": {"path": S, "content": S},
+                             "required": ["path", "content"]}},
+         "brief": {**S, "description": "What Abang asked for, in his words."},
+         "business": {**S, "enum": ["agency", "space", "signals"]}},
+        ["name", "domain", "pages"])),
+
+    "list_sites": (list_sites, FREE, _t(
+        "list_sites", "Sites you have built, their status and file counts.", {})),
+
+    "get_site_file": (get_site_file, FREE, _t(
+        "get_site_file", "Read one file back from a site draft.",
+        {"domain": S, "path": S}, ["domain"])),
+
+    "publish_site": (publish_site, APPROVAL, _t(
+        "publish_site",
+        "Queue a site to go live. Does not publish — Abang approves, and a "
+        "fixed pipeline copies the files. You never touch the web server.",
+        {"domain": S}, ["domain"])),
+
     "add_monitor": (add_monitor, FREE, _t(
         "add_monitor", "Start watching a domain or endpoint.",
         {"name": S, "target": {**S, "description": "domain, no scheme"},
@@ -733,7 +860,7 @@ AGENT_TOOLS: dict[str, list[str]] = {
     "farah": ["set_my_state", "list_content", "draft_content", "list_clients",
               "list_tasks", "create_task", "request_approval", "create_assignment",
               "list_assignments", "set_assignment_enabled", "update_content",
-              "create_client", "update_client"],
+              "create_client", "update_client", "build_site", "list_sites", "get_site_file", "publish_site"],
     "delisha": ["set_my_state", "business_summary", "list_tasks", "create_task",
                 "update_task", "list_clients", "list_invoices", "list_content",
                 "create_assignment", "list_assignments", "set_assignment_enabled",

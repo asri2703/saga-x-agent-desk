@@ -1,0 +1,189 @@
+{
+  "project": "Saga X Agent Desk - Realistic 3D AI Agent Upgrade",
+  "objective": "Replace the existing SVG/cartoon agent avatars with realistic interactive 3D avatars while preserving the existing Agent Desk UI, database, authentication, agent logic, and GPT-5.6/Luna integration.",
+  "primary_agent": {
+    "name": "Putri",
+    "role": "CEO",
+    "avatar_style": "Realistic 3D female digital human, Korean-inspired beauty and premium corporate executive aesthetic.",
+    "visual_direction": {
+      "age_appearance": "30-35",
+      "hair": "Long silky dark black hair",
+      "face": "Elegant Korean-inspired facial features, attractive symmetrical face, natural realistic skin, expressive eyes",
+      "body": "Slim, elegant, anatomically realistic proportions",
+      "outfit": "Luxury fitted dark navy or black executive suit with tasteful premium styling",
+      "personality_visual": "Confident, intelligent, sophisticated, attractive, approachable"
+    }
+  },
+  "hard_requirements": [
+    "First inspect the existing project structure and package.json before changing code.",
+    "Do not rebuild the application from scratch.",
+    "Do not remove or break the existing Desk, Chat, Kelulusan, or Aktiviti features.",
+    "Do not change the existing agent backend or GPT-5.6/Luna logic unless required for the avatar integration.",
+    "Keep existing database, authentication, API routes, agent memory, and business logic intact.",
+    "Implement the 3D avatar as a reusable component so the same system can later support CEO, CTO, CFO, CMO, and COO.",
+    "Use GLB/GLTF as the preferred runtime 3D model format for the browser.",
+    "If the existing frontend is React or Next.js, prefer Three.js with React Three Fiber and @react-three/drei.",
+    "Do not assume the project uses React. Detect the actual framework first and adapt the implementation.",
+    "Do not add unnecessary dependencies.",
+    "Do not expose API keys or secrets in frontend code.",
+    "The application must remain usable if the 3D model or optional voice service fails."
+  ],
+  "implementation_phases": [
+    {
+      "phase": 1,
+      "name": "Inspect Existing Project",
+      "tasks": [
+        "Inspect package.json.",
+        "Identify framework, frontend entry point, routing, component structure, API structure, and existing agent implementation.",
+        "Locate the current SVG/avatar component.",
+        "Locate the current CEO/Putri agent card.",
+        "Identify how chat messages are sent to the existing LLM agent.",
+        "Identify whether text-to-speech or speech-to-text already exists."
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "3D Avatar Foundation",
+      "tasks": [
+        "Add only the required 3D dependencies compatible with the existing framework.",
+        "Create a reusable AgentAvatar component.",
+        "Load /avatars/putri/putri.glb.",
+        "Add camera, lighting, responsive sizing, and proper model positioning.",
+        "Support GLB animations if animation clips are available.",
+        "Do not hardcode the avatar to the CEO role; make model path and agent metadata configurable."
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Avatar States",
+      "states": [
+        "idle",
+        "listening",
+        "thinking",
+        "speaking",
+        "error"
+      ],
+      "behavior": {
+        "idle": "Subtle breathing, blinking, natural eye movement if supported.",
+        "listening": "Face the user/camera and show a subtle listening state.",
+        "thinking": "Use subtle head/eye movement and a restrained thinking animation.",
+        "speaking": "Play speaking animation and lip-sync to the generated audio.",
+        "error": "Return to idle and show a non-blocking error state."
+      }
+    },
+    {
+      "phase": 4,
+      "name": "Voice Conversation",
+      "tasks": [
+        "Preserve the existing text chat.",
+        "Add microphone input only if the browser and current architecture support it safely.",
+        "Convert user speech to text using the project's existing speech-to-text capability if available; otherwise implement a modular STT adapter.",
+        "Send the resulting text to the existing Putri CEO agent.",
+        "Use the existing GPT-5.6/Luna response without changing its personality or business logic."
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "Text To Speech And Lip Sync",
+      "tasks": [
+        "Create a modular TTS adapter instead of hard-coding a vendor into the UI.",
+        "When the CEO response is ready, generate or receive speech audio.",
+        "Play the audio in the browser.",
+        "Drive basic mouth-open movement from audio amplitude as the first working version.",
+        "If the GLB contains facial morph targets/blendshapes, map mouth/jaw controls to the audio.",
+        "If phoneme/viseme data is available from the selected TTS provider, add a more accurate viseme-based lip-sync layer.",
+        "Stop/reset speaking state when audio ends."
+      ]
+    },
+    {
+      "phase": 6,
+      "name": "Integrate Into Current Agent Card",
+      "tasks": [
+        "Replace only the existing SVG/avatar visual area inside the Putri CEO card.",
+        "Keep Putri name, CEO role, status, activity, task information, and existing card interactions.",
+        "Make the 3D canvas responsive to the card dimensions.",
+        "Do not introduce a full-screen 3D scene unless the existing UI already uses one.",
+        "On card selection, allow the user to open the existing chat or conversation interface."
+      ]
+    },
+    {
+      "phase": 7,
+      "name": "Reusable Multi-Agent Architecture",
+      "tasks": [
+        "Create agent configuration data for Putri, Alisya, Julia, Farah, and Delisha.",
+        "Each agent should specify name, role, avatar model path, voice configuration, personality identifier, and visual theme.",
+        "Reuse one AgentAvatar component for all agents.",
+        "Do not duplicate avatar logic per agent."
+      ],
+      "example_config": {
+        "putri": {
+          "name": "Putri",
+          "role": "CEO",
+          "model": "/avatars/putri/putri.glb"
+        },
+        "alisya": {
+          "name": "Alisya",
+          "role": "CTO",
+          "model": "/avatars/alisya/alisya.glb"
+        },
+        "julia": {
+          "name": "Julia",
+          "role": "CFO",
+          "model": "/avatars/julia/julia.glb"
+        },
+        "farah": {
+          "name": "Farah",
+          "role": "CMO",
+          "model": "/avatars/farah/farah.glb"
+        },
+        "delisha": {
+          "name": "Delisha",
+          "role": "COO",
+          "model": "/avatars/delisha/delisha.glb"
+        }
+      }
+    }
+  ],
+  "recommended_assets": {
+    "runtime_model": "GLB/GLTF",
+    "required_avatar_features": [
+      "body rig",
+      "facial rig",
+      "morph targets/blendshapes if possible",
+      "eye movement",
+      "blinking",
+      "jaw movement",
+      "mouth shapes",
+      "idle animation"
+    ],
+    "target_file": "public/avatars/putri/putri.glb"
+  },
+  "performance_requirements": [
+    "Optimize GLB size for web delivery.",
+    "Use compressed textures where appropriate.",
+    "Avoid unnecessarily high polygon counts.",
+    "Lazy-load 3D avatars where possible.",
+    "Dispose Three.js resources correctly when components unmount.",
+    "Do not render hidden avatars unnecessarily.",
+    "Keep the current dashboard fast on desktop and mobile."
+  ],
+  "fallback_behavior": [
+    "If GLB fails to load, show the existing avatar or a clean placeholder.",
+    "If TTS fails, display the text response normally.",
+    "If microphone/STT is unavailable, retain text input.",
+    "If facial morph targets are unavailable, use basic audio-amplitude mouth movement or speaking animation."
+  ],
+  "acceptance_tests": [
+    "Existing Saga X Agent Desk loads normally.",
+    "Putri card displays the GLB 3D avatar instead of the SVG avatar.",
+    "Putri can still be selected and chatted with.",
+    "Existing GPT-5.6/Luna response is unchanged.",
+    "Avatar switches correctly between idle, listening, thinking, and speaking.",
+    "TTS audio plays when enabled.",
+    "Avatar mouth moves while speaking.",
+    "No API secret is exposed in client-side code.",
+    "Existing Desk, Chat, Kelulusan, and Aktiviti functionality continues to work.",
+    "The implementation is reusable for the other four agents."
+  ],
+  "developer_instruction": "Work incrementally. Before editing, inspect the repository. After each major change, run the existing build/typecheck/lint commands if available. Prefer small, reversible changes. Report exactly which files were created or modified and explain any dependency added."
+}

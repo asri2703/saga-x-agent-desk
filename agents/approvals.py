@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Callable
 
 from . import db
@@ -172,7 +173,66 @@ def _exec_record_expense(approval: dict, payload: dict) -> dict:
             "description": row["description"]}
 
 
+def _exec_publish_site(approval: dict, payload: dict) -> dict:
+    """Copy a site's files from the database to disk.
+
+    This is the only thing publishing does. nginx is configured once, by
+    hand, to serve whatever directory matches the hostname — so there is
+    no reload, no config generation, and no agent anywhere near a web
+    server. The whole pipeline is a file write.
+
+    Paths were validated when the site was built. They are validated
+    again here because this is the step that touches the filesystem, and
+    a payload is replayed exactly as stored.
+
+    Writes to the filesystem of whichever process approves. Approving
+    from the dashboard writes to the VM, which is what you want;
+    approving from a laptop writes to the laptop, which is not. Publish
+    from the dashboard.
+    """
+    import os
+    import re
+
+    site_id = payload.get("site_id")
+    domain = (payload.get("domain") or "").strip().lower()
+    if not site_id or not domain:
+        raise ApprovalError("needs site_id and domain")
+    if not re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", domain) or ".." in domain:
+        raise ApprovalError(f"refusing to publish to {domain!r}")
+
+    files = db.select("site_files", filters={"site_id": site_id})
+    if not files:
+        raise ApprovalError("site has no files")
+
+    root = Path(os.environ.get("SITES_ROOT", "/opt/saga-x-sites")).resolve()
+    target = (root / domain).resolve()
+    if not str(target).startswith(str(root) + os.sep):
+        raise ApprovalError("site directory escapes the sites root")
+
+    target.mkdir(parents=True, exist_ok=True)
+    written = []
+    for f in files:
+        rel = str(f["path"]).lstrip("/")
+        dest = (target / rel).resolve()
+        # The real guard. Everything above is a sanity check; this is
+        # what makes "../../etc/nginx/nginx.conf" impossible.
+        if not str(dest).startswith(str(target) + os.sep):
+            raise ApprovalError(f"path escapes the site directory: {rel!r}")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(f["content"], encoding="utf-8")
+        written.append(rel)
+
+    db.update("sites", {"id": site_id}, {
+        "status": "live", "published_at": datetime.now(timezone.utc)})
+
+    return {"domain": domain, "files": written, "path": str(target),
+            "url": f"https://{domain}",
+            "note": "Files written. DNS for this domain must point at the "
+                    "desk VM for it to resolve."}
+
+
 EXECUTORS: dict[str, Callable[[dict, dict], dict]] = {
+    "publish_site": _exec_publish_site,
     "set_invoice_status": _exec_set_invoice_status,
     "record_expense": _exec_record_expense,
     "create_invoice": _exec_create_invoice,
